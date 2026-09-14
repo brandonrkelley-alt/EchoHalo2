@@ -26,7 +26,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore known-good v0.4.1 source and apply v0.4.2 fix
+      - name: Restore verified v0.4.1 source and make v0.4.2
         id: source
         shell: bash
         run: |
@@ -46,125 +46,89 @@ jobs:
           mkdir -p "$PROJECT"
           unzip -q "$ZIP" -d "$PROJECT"
 
-          cat > "$RUNNER_TEMP/v042.patch" <<'PATCH'
-          --- a/app/build.gradle
-          +++ b/app/build.gradle
-          @@ -10,7 +10,7 @@
-                   applicationId 'org.neocities.bk26.echohalospatial'
-                   minSdk 28
-                   targetSdk 35
-          -        versionCode 6
-          -        versionName '0.4.1'
-          +        versionCode 7
-          +        versionName '0.4.2'
-               }
-           }
-          --- a/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java
-          +++ b/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java
-          @@ -28,7 +28,7 @@
-           import java.util.Map;
-           
-           public class MainActivity extends Activity implements SpatialAudioEngine.Listener {
-          -    private static final String VERSION = "0.4.1";
-          +    private static final String VERSION = "0.4.2";
-               private static final int REQ_MIC = 81;
-           
-               private SpatialAudioEngine engine;
-          @@ -80,7 +80,7 @@
-                   sub.setPadding(0, dp(2), 0, dp(14));
-                   root.addView(sub);
-           
-          -        root.addView(card("PURPOSE\nProve whether Samsung's public two-channel CAMCORDER stream can repeatedly identify LEFT / FRONT / RIGHT / BEHIND from acoustic evidence alone. v0.4.1 keeps the learned four-way fingerprint and adds ground-truth scoring, a confusion matrix, runner-up probabilities, and live lag history.", 15, 0xFFFFD17A));
-          +        root.addView(card("PURPOSE\nProve whether Samsung's public two-channel CAMCORDER stream can repeatedly identify LEFT / FRONT / RIGHT / BEHIND from acoustic evidence alone. v0.4.2 keeps the learned four-way fingerprint and fixes blind-trial capture so ACTUAL taps score the most recent accepted prediction that was actually presented, rather than a later rejected audio frame.", 15, 0xFFFFD17A));
-           
-                   statusView = text(engine.hasAllProfiles()
-                           ? "Saved 4/4 calibration found. Start the microphone to begin the blind test."
-          @@ -313,7 +313,9 @@
-               private void recordTruth(SpatialAudioEngine.Direction actual) {
-                   SpatialAudioEngine.BlindTrial t = engine.recordGroundTruth(actual);
-                   if (t == null) {
-          -            Toast.makeText(this, "No fresh accepted prediction yet. Let the arrow settle on a clear sound, then tap again.", Toast.LENGTH_LONG).show();
-          +            lastTrialView.setText("NOT RECORDED  ·  no fresh accepted prediction. Let the arrow settle on a clear sound, then tap again.");
-          +            lastTrialView.setTextColor(0xFFFFD17A);
-          +            Toast.makeText(this, "Not recorded — wait for a fresh direction prediction, then tap again.", Toast.LENGTH_LONG).show();
-                       return;
-                   }
-                   String result = t.isCorrect() ? "✓ CORRECT" : "✕ MISS";
-          --- a/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java
-          +++ b/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java
-          @@ -62,6 +62,7 @@
-               private final List<Feature> calibrationFrames = new ArrayList<>();
-               private volatile Feature latestFeature;
-               private volatile ClassificationResult latestClassification;
-          +    private volatile ClassificationResult latestAcceptedClassification;
-               private long lastRecordedClassificationNanos = Long.MIN_VALUE;
-               private String routeSummary = "not started";
-           
-          @@ -82,6 +83,7 @@
-               public void setLiveEnabled(boolean enabled) {
-                   liveEnabled = enabled;
-                   latestClassification = null;
-          +        latestAcceptedClassification = null;
-                   synchronized (smoothedPosteriors) { smoothedPosteriors.clear(); }
-                   log("LIVE " + (enabled ? "ON" : "OFF"));
-               }
-          @@ -97,6 +99,7 @@
-                   running = false;
-                   liveEnabled = false;
-                   latestClassification = null;
-          +        latestAcceptedClassification = null;
-                   synchronized (stateLock) {
-                       calibrationTarget = null;
-                       calibrationFrames.clear();
-          @@ -128,11 +131,15 @@
-                   e.apply();
-                   synchronized (smoothedPosteriors) { smoothedPosteriors.clear(); }
-                   latestClassification = null;
-          +        latestAcceptedClassification = null;
-                   log("CALIBRATION CLEARED");
-               }
-           
-               public BlindTrial recordGroundTruth(Direction actual) {
-          -        ClassificationResult r = latestClassification;
-          +        // Score the most recent ACCEPTED result, not the most recent raw frame.
-          +        // A rejected frame can arrive between the UI displaying an accepted arrow and
-          +        // the user's tap; using latestClassification made apparently valid taps vanish.
-          +        ClassificationResult r = latestAcceptedClassification;
-                   long now = System.nanoTime();
-                   if (!liveEnabled || r == null || !r.accepted || r.best == null) return null;
-                   if (now - r.timestampNanos > MAX_TRUTH_AGE_NS) return null;
-          @@ -350,6 +357,7 @@
-                           true, answer, runner, avg[best], avg[second], confidence,
-                           avg.clone(), distances, f, dtext, System.nanoTime());
-                   latestClassification = result;
-          +        latestAcceptedClassification = result;
-                   main.post(() -> listener.onClassification(result));
-               }
-           
-          @@ -414,12 +422,12 @@
-           
-               public String buildReport() {
-                   StringBuilder b = new StringBuilder();
-          -        b.append("EchoHalo Spatial Calibration Lab v0.4.1\n");
-          +        b.append("EchoHalo Spatial Calibration Lab v0.4.2\n");
-                   b.append("Device route: ").append(routeSummary).append("\n");
-                   b.append("Sample rate: ").append(SAMPLE_RATE).append(" Hz\n");
-                   b.append("Classifier features: GCC-style interchannel lag + low/mid/high interchannel level difference + peak correlation\n");
-                   b.append("Classifier smoothing: 9 accepted-frame posterior moving average\n");
-          -        b.append("Blind truth rule: latest accepted classification must be <1.5 s old; one ground-truth tap = one trial\n");
-          +        b.append("Blind truth rule: most recent accepted classification must be <1.5 s old; rejected audio frames do not erase it; one ground-truth tap = one trial\n");
-                   b.append("Orientation: phone flat, screen up; top edge=FRONT, right edge=RIGHT, bottom edge=BEHIND, left edge=LEFT\n\n");
-                   b.append("CALIBRATION PROFILES\n");
-                   for (Direction d : Direction.values()) {
-          PATCH
+          PROJECT="$PROJECT" python3 <<'PY'
+          import os
+          from pathlib import Path
 
-          sed -i 's/^          //' "$RUNNER_TEMP/v042.patch"
-          patch -d "$PROJECT" -p1 --forward < "$RUNNER_TEMP/v042.patch"
+          root = Path(os.environ['PROJECT'])
+
+          def replace_once(rel, old, new, label):
+              path = root / rel
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly 1 match, found {count}")
+              path.write_text(text.replace(old, new, 1))
+              print(f"Applied: {label}")
+
+          build = Path('app/build.gradle')
+          main = Path('app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java')
+          engine = Path('app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java')
+
+          replace_once(build,
+              "        versionCode 6\n        versionName '0.4.1'",
+              "        versionCode 7\n        versionName '0.4.2'",
+              'version 0.4.2')
+
+          replace_once(main,
+              '    private static final String VERSION = "0.4.1";',
+              '    private static final String VERSION = "0.4.2";',
+              'UI version')
+
+          replace_once(main,
+              'v0.4.1 keeps the learned four-way fingerprint and adds ground-truth scoring, a confusion matrix, runner-up probabilities, and live lag history.',
+              'v0.4.2 keeps the learned four-way fingerprint and fixes blind-trial capture so ACTUAL taps score the most recent accepted prediction that was actually presented.',
+              'purpose text')
+
+          replace_once(main,
+              '            Toast.makeText(this, "No fresh accepted prediction yet. Let the arrow settle on a clear sound, then tap again.", Toast.LENGTH_LONG).show();\n            return;',
+              '            lastTrialView.setText("NOT RECORDED  ·  no fresh accepted prediction. Let the arrow settle on a clear sound, then tap again.");\n            lastTrialView.setTextColor(0xFFFFD17A);\n            Toast.makeText(this, "Not recorded — wait for a fresh direction prediction, then tap again.", Toast.LENGTH_LONG).show();\n            return;',
+              'visible failed-tap feedback')
+
+          replace_once(engine,
+              '    private volatile ClassificationResult latestClassification;\n    private long lastRecordedClassificationNanos',
+              '    private volatile ClassificationResult latestClassification;\n    private volatile ClassificationResult latestAcceptedClassification;\n    private long lastRecordedClassificationNanos',
+              'accepted prediction field')
+
+          replace_once(engine,
+              '        liveEnabled = enabled;\n        latestClassification = null;\n        synchronized (smoothedPosteriors)',
+              '        liveEnabled = enabled;\n        latestClassification = null;\n        latestAcceptedClassification = null;\n        synchronized (smoothedPosteriors)',
+              'live reset')
+
+          replace_once(engine,
+              '        running = false;\n        liveEnabled = false;\n        latestClassification = null;\n        synchronized (stateLock)',
+              '        running = false;\n        liveEnabled = false;\n        latestClassification = null;\n        latestAcceptedClassification = null;\n        synchronized (stateLock)',
+              'stop reset')
+
+          replace_once(engine,
+              '        synchronized (smoothedPosteriors) { smoothedPosteriors.clear(); }\n        latestClassification = null;\n        log("CALIBRATION CLEARED")',
+              '        synchronized (smoothedPosteriors) { smoothedPosteriors.clear(); }\n        latestClassification = null;\n        latestAcceptedClassification = null;\n        log("CALIBRATION CLEARED")',
+              'calibration reset')
+
+          replace_once(engine,
+              '        ClassificationResult r = latestClassification;\n        long now = System.nanoTime();',
+              '        // Preserve the last accepted prediction across rejected/marginal frames so a visible\n        // direction cannot disappear in the milliseconds between display and ACTUAL tap.\n        ClassificationResult r = latestAcceptedClassification;\n        long now = System.nanoTime();',
+              'truth capture source')
+
+          replace_once(engine,
+              '        latestClassification = result;\n        main.post(() -> listener.onClassification(result));\n    }\n\n    private double distanceSquared',
+              '        latestClassification = result;\n        latestAcceptedClassification = result;\n        main.post(() -> listener.onClassification(result));\n    }\n\n    private double distanceSquared',
+              'accepted prediction update')
+
+          replace_once(engine,
+              '        b.append("EchoHalo Spatial Calibration Lab v0.4.1\\n");',
+              '        b.append("EchoHalo Spatial Calibration Lab v0.4.2\\n");',
+              'report version')
+
+          replace_once(engine,
+              '        b.append("Blind truth rule: latest accepted classification must be <1.5 s old; one ground-truth tap = one trial\\n");',
+              '        b.append("Blind truth rule: most recent accepted classification must be <1.5 s old; rejected audio frames do not erase it; one ground-truth tap = one trial\\n");',
+              'report rule')
+          PY
 
           test -f "$PROJECT/settings.gradle" || { echo "::error::Recovered source missing settings.gradle"; exit 1; }
-          test -f "$PROJECT/app/build.gradle" || { echo "::error::Recovered source missing app/build.gradle"; exit 1; }
-          grep -q "versionName '0.4.2'" "$PROJECT/app/build.gradle" || { echo "::error::v0.4.2 version patch did not apply"; exit 1; }
-          grep -q 'latestAcceptedClassification' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java" || { echo "::error::accepted-classification fix missing"; exit 1; }
+          grep -q "versionName '0.4.2'" "$PROJECT/app/build.gradle" || { echo "::error::v0.4.2 version edit missing"; exit 1; }
+          grep -q 'latestAcceptedClassification = result' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java" || { echo "::error::accepted-classification fix missing"; exit 1; }
           grep -q 'NOT RECORDED' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::visible failed-tap feedback missing"; exit 1; }
 
           VERSION_NAME=$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" "$PROJECT/app/build.gradle" | head -n 1)
@@ -232,7 +196,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "EchoHalo Spatial Lab v${{ steps.source.outputs.version_name }}" \
-            --notes "Built from the verified v0.4.1 source archive at commit 57b359199ac1e557ea861603905df6033beab042 with the deterministic v0.4.2 blind-truth race fix applied in CI."
+            --notes "Built from the SHA-256 verified v0.4.1 source archive with deterministic v0.4.2 text edits applied in CI."
 
       - name: Build summary
         shell: bash
@@ -243,6 +207,6 @@ jobs:
             echo '- App version: **v${{ steps.source.outputs.version_name }}**'
             echo '- Version code: `${{ steps.source.outputs.version_code }}`'
             echo '- Artifact: **EchoHalo-Spatial-Lab-v${{ steps.source.outputs.version_name }}**'
-            echo '- Base source: verified successful v0.4.1 commit'
-            echo '- Patch: blind-truth accepted-classification race fix + visible NOT RECORDED feedback'
+            echo '- Base: SHA-256 verified successful v0.4.1 source'
+            echo '- v0.4.2: accepted-prediction blind-tap fix + visible NOT RECORDED feedback'
           } >> "$GITHUB_STEP_SUMMARY"
