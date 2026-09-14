@@ -8,6 +8,7 @@ on:
     paths:
       - 'hybrid_v110_payload_*.txt'
       - 'hybrid_v111/**'
+      - 'hybrid_v112/**'
       - '.github/workflows/build-android.yml'
 
 permissions:
@@ -57,12 +58,14 @@ jobs:
           tar -xzf "$PAYLOAD" -C "$OVERLAY"
           python3 "$OVERLAY/hybrid_v110/patch_project.py" "$PROJECT" "$OVERLAY"
           python3 hybrid_v111/mic_arbiter_patch.py "$PROJECT"
+          python3 hybrid_v112/native_shell_cleanup.py "$PROJECT"
 
           VERSION_NAME=$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" "$PROJECT/app/build.gradle" | head -n 1)
           VERSION_CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' "$PROJECT/app/build.gradle" | head -n 1)
           grep -q 'https://bk26.neocities.org/EchoHalo/' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::EchoHalo live UI URL missing"; exit 1; }
           grep -q 'Orientation Scout' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::Spatial UI injection missing"; exit 1; }
           grep -q 'microphone arbiter' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.1.1 microphone arbiter missing"; exit 1; }
+          grep -q 'Android managed microphone' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.1.2 native shell cleanup missing"; exit 1; }
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
@@ -124,7 +127,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "EchoHalo v${{ steps.source.outputs.version_name }} Hybrid" \
-            --notes "Full EchoHalo UI with native stereo Spatial Compass. v1.1.1 adds microphone arbitration so Voice Mirror, captions, browser audio, and native spatial capture no longer fight over the handset microphone. Browser-only hardware probes are disabled in the native shell."
+            --notes "Full EchoHalo UI with native stereo Spatial Compass. v1.1.2 keeps microphone arbitration and cleans up native-shell microphone settings by hiding browser-only device enumeration and obsolete browser hardware diagnostics."
 
       - name: Build summary
         shell: bash
@@ -137,5 +140,5 @@ jobs:
             echo '- Native 48 kHz stereo Spatial Compass bridge'
             echo '- Orientation Scout: portrait + two upright landscape poses'
             echo '- Microphone arbitration between native spatial capture and WebView audio features'
-            echo '- Browser-only hardware probes disabled in the native shell'
+            echo '- Android-managed microphone UI; browser-only hardware probes hidden'
           } >> "$GITHUB_STEP_SUMMARY"
