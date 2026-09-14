@@ -1,4 +1,4 @@
-name: Build EchoHalo Spatial Compass APK
+name: Build EchoHalo Hybrid Android APK
 
 on:
   workflow_dispatch:
@@ -6,14 +6,14 @@ on:
     branches:
       - main
     paths:
-      - 'spatial_v050/**'
+      - 'hybrid_v110_payload_*.txt'
       - '.github/workflows/build-android.yml'
 
 permissions:
   contents: write
 
 concurrency:
-  group: echohalo-spatial-${{ github.ref }}
+  group: echohalo-hybrid-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,43 +27,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore verified v0.4.1 source and overlay v0.5.0
+      - name: Restore verified spatial base and overlay EchoHalo v1.1.0
         id: source
         shell: bash
         run: |
           set -euo pipefail
-
           BASE_COMMIT='57b359199ac1e557ea861603905df6033beab042'
           EXPECTED_BASE_SHA='d3f632fee53b07108f3a59d701bc1c7d1efb092dd3e1055b1d1a62168dd420a3'
-          ZIP="$RUNNER_TEMP/echohalo-v041.zip"
-          PROJECT="$RUNNER_TEMP/echohalo-source"
-          JAVA_DIR="$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial"
+          EXPECTED_OVERLAY_SHA='ae930300583ab33d7b05240d0a853ccbed37a881e4f74ca27c273123636a6803'
+          ZIP="$RUNNER_TEMP/echohalo-spatial-base.zip"
+          PROJECT="$RUNNER_TEMP/echohalo-hybrid"
+          OVERLAY="$RUNNER_TEMP/echohalo-overlay"
+          PAYLOAD="$RUNNER_TEMP/hybrid_v110_payload.tgz"
 
           git show "$BASE_COMMIT:EchoHalo_Spatial_Source_v0.1.1.zip" > "$ZIP"
           ACTUAL_BASE_SHA=$(sha256sum "$ZIP" | awk '{print $1}')
           echo "Recovered base ZIP SHA-256: $ACTUAL_BASE_SHA"
           test "$ACTUAL_BASE_SHA" = "$EXPECTED_BASE_SHA" || { echo "::error::Known-good base ZIP hash mismatch"; exit 1; }
 
-          rm -rf "$PROJECT"
-          mkdir -p "$PROJECT"
+          cat hybrid_v110_payload_00.txt hybrid_v110_payload_01.txt hybrid_v110_payload_02.txt hybrid_v110_payload_03.txt | base64 -d > "$PAYLOAD"
+          ACTUAL_OVERLAY_SHA=$(sha256sum "$PAYLOAD" | awk '{print $1}')
+          echo "Hybrid overlay SHA-256: $ACTUAL_OVERLAY_SHA"
+          test "$ACTUAL_OVERLAY_SHA" = "$EXPECTED_OVERLAY_SHA" || { echo "::error::Hybrid overlay hash mismatch"; exit 1; }
+
+          rm -rf "$PROJECT" "$OVERLAY"
+          mkdir -p "$PROJECT" "$OVERLAY"
           unzip -q "$ZIP" -d "$PROJECT"
-
-          cp spatial_v050/MainActivity.java "$JAVA_DIR/MainActivity.java"
-          cp spatial_v050/CompassView.java "$JAVA_DIR/CompassView.java"
-          python3 spatial_v050/patch_engine.py "$PROJECT"
-
-          grep -q "versionName '0.5.0'" "$PROJECT/app/build.gradle" || { echo "::error::v0.5.0 version missing"; exit 1; }
-          grep -q 'class CompassView' "$JAVA_DIR/CompassView.java" || { echo "::error::CompassView missing"; exit 1; }
-          grep -q 'calibrationSnapCount' "$JAVA_DIR/SpatialAudioEngine.java" || { echo "::error::snap calibration missing"; exit 1; }
-          grep -q 'latestAcceptedClassification = result' "$JAVA_DIR/SpatialAudioEngine.java" || { echo "::error::accepted-result fix missing"; exit 1; }
+          tar -xzf "$PAYLOAD" -C "$OVERLAY"
+          python3 "$OVERLAY/hybrid_v110/patch_project.py" "$PROJECT" "$OVERLAY"
 
           VERSION_NAME=$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" "$PROJECT/app/build.gradle" | head -n 1)
           VERSION_CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' "$PROJECT/app/build.gradle" | head -n 1)
+          grep -q 'https://bk26.neocities.org/EchoHalo/' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::EchoHalo live UI URL missing"; exit 1; }
+          grep -q 'Orientation Scout' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::Spatial UI injection missing"; exit 1; }
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "Building EchoHalo Spatial Compass v$VERSION_NAME (versionCode $VERSION_CODE)"
+          echo "Building EchoHalo Hybrid v$VERSION_NAME (versionCode $VERSION_CODE)"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -87,9 +88,7 @@ jobs:
       - name: Build debug APK
         shell: bash
         working-directory: ${{ steps.source.outputs.project }}
-        run: |
-          set -euo pipefail
-          gradle --no-daemon --stacktrace :app:assembleDebug
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
 
       - name: Prepare APK
         id: apk
@@ -97,8 +96,8 @@ jobs:
         run: |
           set -euo pipefail
           APK='${{ steps.source.outputs.project }}/app/build/outputs/apk/debug/app-debug.apk'
-          test -f "$APK" || { echo "::error::app-debug.apk was not found"; exit 1; }
-          OUT="$RUNNER_TEMP/EchoHalo-Spatial-Compass-v${{ steps.source.outputs.version_name }}-debug.apk"
+          test -f "$APK" || { echo "::error::app-debug.apk not found"; exit 1; }
+          OUT="$RUNNER_TEMP/EchoHalo-v${{ steps.source.outputs.version_name }}-hybrid-debug.apk"
           cp "$APK" "$OUT"
           echo "apk=$OUT" >> "$GITHUB_OUTPUT"
           echo "APK SHA-256: $(sha256sum "$OUT" | awk '{print $1}')"
@@ -107,7 +106,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EchoHalo-Spatial-Compass-v${{ steps.source.outputs.version_name }}
+          name: EchoHalo-v${{ steps.source.outputs.version_name }}-Hybrid
           path: ${{ steps.apk.outputs.apk }}
           if-no-files-found: error
           retention-days: 14
@@ -117,23 +116,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="spatial-compass-v${{ steps.source.outputs.version_name }}-build-${GITHUB_RUN_NUMBER}"
+          TAG="echohalo-v${{ steps.source.outputs.version_name }}-build-${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" '${{ steps.apk.outputs.apk }}' \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "EchoHalo Spatial Compass v${{ steps.source.outputs.version_name }}" \
-            --notes "Upright normal-use Spatial Compass prototype. Finger-snap calibration, pose check, continuous border dot, sound-intensity sizing, and hidden diagnostics."
+            --title "EchoHalo v${{ steps.source.outputs.version_name }} Hybrid" \
+            --notes "Full EchoHalo UI with native stereo Spatial Compass injected into Listen and Settings. Includes Orientation Scout, adaptive noise gating, snap calibration, and calibration-pose binding."
 
       - name: Build summary
         shell: bash
         run: |
           {
-            echo '## EchoHalo Spatial Compass build'
+            echo '## EchoHalo Hybrid Android build'
             echo
             echo '- App version: **v${{ steps.source.outputs.version_name }}**'
             echo '- Version code: `${{ steps.source.outputs.version_code }}`'
-            echo '- Artifact: **EchoHalo-Spatial-Compass-v${{ steps.source.outputs.version_name }}**'
-            echo '- Default pose: portrait, screen facing user, nearly vertical'
-            echo '- Calibration: 3 detected snap bursts per cardinal direction'
-            echo '- Display: continuous posterior-vector dot with RMS-driven size'
+            echo '- Actual EchoHalo PWA UI hosted in native Android shell'
+            echo '- Native 48 kHz stereo Spatial Compass bridge'
+            echo '- Orientation Scout: portrait + two upright landscape poses'
+            echo '- Calibration: 3 direct snap transients per cardinal direction'
+            echo '- Adaptive room-noise gate and pose mismatch guard'
           } >> "$GITHUB_STEP_SUMMARY"
