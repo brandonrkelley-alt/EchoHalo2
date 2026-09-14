@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'hybrid_v110_payload_*.txt'
+      - 'hybrid_v111/**'
       - '.github/workflows/build-android.yml'
 
 permissions:
@@ -27,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore verified spatial base and overlay EchoHalo v1.1.0
+      - name: Restore verified spatial base and overlay EchoHalo hybrid
         id: source
         shell: bash
         run: |
@@ -55,11 +56,13 @@ jobs:
           unzip -q "$ZIP" -d "$PROJECT"
           tar -xzf "$PAYLOAD" -C "$OVERLAY"
           python3 "$OVERLAY/hybrid_v110/patch_project.py" "$PROJECT" "$OVERLAY"
+          python3 hybrid_v111/mic_arbiter_patch.py "$PROJECT"
 
           VERSION_NAME=$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" "$PROJECT/app/build.gradle" | head -n 1)
           VERSION_CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' "$PROJECT/app/build.gradle" | head -n 1)
           grep -q 'https://bk26.neocities.org/EchoHalo/' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::EchoHalo live UI URL missing"; exit 1; }
           grep -q 'Orientation Scout' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::Spatial UI injection missing"; exit 1; }
+          grep -q 'microphone arbiter' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.1.1 microphone arbiter missing"; exit 1; }
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
@@ -121,7 +124,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "EchoHalo v${{ steps.source.outputs.version_name }} Hybrid" \
-            --notes "Full EchoHalo UI with native stereo Spatial Compass injected into Listen and Settings. Includes Orientation Scout, adaptive noise gating, snap calibration, and calibration-pose binding."
+            --notes "Full EchoHalo UI with native stereo Spatial Compass. v1.1.1 adds microphone arbitration so Voice Mirror, captions, browser audio, and native spatial capture no longer fight over the handset microphone. Browser-only hardware probes are disabled in the native shell."
 
       - name: Build summary
         shell: bash
@@ -131,9 +134,8 @@ jobs:
             echo
             echo '- App version: **v${{ steps.source.outputs.version_name }}**'
             echo '- Version code: `${{ steps.source.outputs.version_code }}`'
-            echo '- Actual EchoHalo PWA UI hosted in native Android shell'
             echo '- Native 48 kHz stereo Spatial Compass bridge'
             echo '- Orientation Scout: portrait + two upright landscape poses'
-            echo '- Calibration: 3 direct snap transients per cardinal direction'
-            echo '- Adaptive room-noise gate and pose mismatch guard'
+            echo '- Microphone arbitration between native spatial capture and WebView audio features'
+            echo '- Browser-only hardware probes disabled in the native shell'
           } >> "$GITHUB_STEP_SUMMARY"
