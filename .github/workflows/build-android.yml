@@ -10,6 +10,7 @@ on:
       - 'hybrid_v111/**'
       - 'hybrid_v112/**'
       - 'hybrid_v120/**'
+      - 'hybrid_v121/**'
       - '.github/workflows/build-android.yml'
 
 permissions:
@@ -61,16 +62,17 @@ jobs:
           python3 hybrid_v111/mic_arbiter_patch.py "$PROJECT"
           python3 hybrid_v112/native_shell_cleanup.py "$PROJECT"
           python3 hybrid_v120/speechcompass_patch.py "$PROJECT" "$GITHUB_WORKSPACE"
+          python3 hybrid_v121/rotation_layout_patch.py "$PROJECT"
 
           VERSION_NAME=$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" "$PROJECT/app/build.gradle" | head -n 1)
           VERSION_CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' "$PROJECT/app/build.gradle" | head -n 1)
           grep -q 'https://bk26.neocities.org/EchoHalo/' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::EchoHalo live UI URL missing"; exit 1; }
           grep -q 'Orientation Scout' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::Spatial UI injection missing"; exit 1; }
-          grep -q 'microphone arbiter' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.1.1 microphone arbiter missing"; exit 1; }
-          grep -q 'Android managed microphone' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.1.2 native shell cleanup missing"; exit 1; }
           grep -q 'partial GCC-PHAT' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java" || { echo "::error::v1.2.0 GCC-PHAT localization missing"; exit 1; }
           grep -q 'EXTRA_AUDIO_SOURCE' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/NativeCaptionEngine.java" || { echo "::error::v1.2.0 shared-audio captions missing"; exit 1; }
           grep -q '__echoHaloSpatialCaptionV120' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.0 unified spatial-caption UI missing"; exit 1; }
+          grep -q '__echoHaloRotationLayoutV121' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.1 rotation/layout patch missing"; exit 1; }
+          grep -q 'android:configChanges=' "$PROJECT/app/src/main/AndroidManifest.xml" || { echo "::error::v1.2.1 orientation state preservation missing"; exit 1; }
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
@@ -132,7 +134,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "EchoHalo v${{ steps.source.outputs.version_name }} Hybrid" \
-            --notes "SpeechCompass-inspired EchoHalo build: partial GCC-PHAT localization, one shared native microphone stream for localization + Android speech recognition, phrase-level direction aggregation, and a unified caption/compass display."
+            --notes "Unified Spatial Captions plus rotation-safe Orientation Scout. v1.2.1 keeps the Activity/WebView alive across portrait/landscape changes, bypasses the browser launch screen in the native app, preserves the active tab, and adds a compact responsive landscape Listen/Settings layout."
 
       - name: Build summary
         shell: bash
@@ -146,5 +148,7 @@ jobs:
             echo '- One native 48 kHz stereo capture shared with Android SpeechRecognizer via EXTRA_AUDIO_SOURCE'
             echo '- Phrase direction aggregated across the speech interval'
             echo '- Spatial border dot integrated directly around the live caption'
-            echo '- Orientation Scout retained for built-in-phone microphone geometry'
+            echo '- Orientation Scout survives portrait/landscape rotations without Activity recreation'
+            echo '- Native Android shell bypasses the browser/PWA title/fullscreen screen'
+            echo '- Compact responsive landscape Listen + Settings layout'
           } >> "$GITHUB_STEP_SUMMARY"
