@@ -12,6 +12,7 @@ on:
       - 'hybrid_v120/**'
       - 'hybrid_v121/**'
       - 'hybrid_v122/**'
+      - 'hybrid_v123/**'
       - '.github/workflows/build-android.yml'
 
 permissions:
@@ -65,19 +66,20 @@ jobs:
           python3 hybrid_v120/speechcompass_patch.py "$PROJECT" "$GITHUB_WORKSPACE"
           python3 hybrid_v121/rotation_layout_patch.py "$PROJECT"
           python3 hybrid_v122/usability_patch.py "$PROJECT"
+          python3 hybrid_v123/runtime_fix_patch.py "$PROJECT"
 
           VERSION_NAME=$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" "$PROJECT/app/build.gradle" | head -n 1)
           VERSION_CODE=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' "$PROJECT/app/build.gradle" | head -n 1)
           grep -q 'https://bk26.neocities.org/EchoHalo/' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::EchoHalo live UI URL missing"; exit 1; }
-          grep -q 'Orientation Scout' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::Spatial UI injection missing"; exit 1; }
-          grep -q 'partial GCC-PHAT' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java" || { echo "::error::v1.2.0 GCC-PHAT localization missing"; exit 1; }
-          grep -q 'EXTRA_AUDIO_SOURCE' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/NativeCaptionEngine.java" || { echo "::error::v1.2.0 shared-audio captions missing"; exit 1; }
-          grep -q '__echoHaloSpatialCaptionV120' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.0 unified spatial-caption UI missing"; exit 1; }
-          grep -q '__echoHaloRotationLayoutV121' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.1 rotation/layout patch missing"; exit 1; }
-          grep -q '__echoHaloDailyUseV122' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.2 daily-use patch missing"; exit 1; }
-          grep -q 'echohalo-caption-history-v122' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.2 caption history persistence missing"; exit 1; }
-          grep -q 'ehScoutDiagram' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.2 Scout diagram missing"; exit 1; }
-          grep -q "versionName '1.2.2'" "$PROJECT/app/build.gradle" || { echo "::error::wrong app version"; exit 1; }
+          grep -q 'partial GCC-PHAT' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/SpatialAudioEngine.java" || { echo "::error::GCC-PHAT localization missing"; exit 1; }
+          grep -q 'EXTRA_AUDIO_SOURCE' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/NativeCaptionEngine.java" || { echo "::error::shared-audio captions missing"; exit 1; }
+          grep -q '__echoHaloV123MicWrapper' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.3 microphone wrapper missing"; exit 1; }
+          grep -q 'ehV123RuntimeBadge' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::v1.2.3 runtime UI boot missing"; exit 1; }
+          grep -q 'ehPosePickerV123' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::manual orientation picker missing"; exit 1; }
+          grep -q 'ehScoutDiagramV123' "$PROJECT/app/src/main/assets/spatial_inject.js" || { echo "::error::Scout diagram missing"; exit 1; }
+          grep -q 'android.permission.VIBRATE' "$PROJECT/app/src/main/AndroidManifest.xml" || { echo "::error::native haptic permission missing"; exit 1; }
+          grep -q 'public void hapticPulse' "$PROJECT/app/src/main/java/org/neocities/bk26/echohalospatial/MainActivity.java" || { echo "::error::native haptic bridge missing"; exit 1; }
+          grep -q "versionName '1.2.3'" "$PROJECT/app/build.gradle" || { echo "::error::wrong app version"; exit 1; }
 
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
@@ -146,7 +148,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "EchoHalo v${{ steps.source.outputs.version_name }} Hybrid" \
-            --notes "Caption-first daily-use build. Keeps native shared-audio captions + Spatial Compass, adds persistent Recent Captions, microphone handoff for Voice Mirror/Worship, visual Orientation Scout phone diagrams, and auto-hiding Listen controls so the live caption fills the screen."
+            --notes "Runtime recovery build: delayed DOM-safe UI boot, truly caption-first layout, persistent caption rescue, stronger Voice Mirror/Worship microphone release with NotReadable retry, native haptics, visible Scout diagrams, and manual real-time orientation override."
 
       - name: Build summary
         shell: bash
@@ -156,10 +158,11 @@ jobs:
             echo
             echo '- App version: **v${{ steps.source.outputs.version_name }}**'
             echo '- Version code: `${{ steps.source.outputs.version_code }}`'
-            echo '- Native shared-audio captions + Spatial Compass retained'
-            echo '- Persistent Recent Captions with final/partial recovery'
-            echo '- Voice Mirror / Worship microphone handoff and native stream restore'
-            echo '- Caption-first Listen layout with auto-hiding controls'
-            echo '- Visual Orientation Scout diagrams for portrait and both upright landscape poses'
-            echo '- Existing partial GCC-PHAT direction engine and rotation-safe Scout retained'
+            echo '- Delayed DOM-safe v1.2.3 runtime initializer'
+            echo '- Voice Mirror / Worship NotReadable retry after releasing native captions + spatial AudioRecord'
+            echo '- Native Android haptics for Worship beat'
+            echo '- Persistent caption rescue from final or stable interim text'
+            echo '- Caption-first Listen layout with History collapsed by default'
+            echo '- Visual Scout diagram plus manual Portrait / Landscape-left / Landscape-right selection'
+            echo '- Manual pose selection can force live spatial mode; recalibration in that pose remains recommended'
           } >> "$GITHUB_STEP_SUMMARY"
