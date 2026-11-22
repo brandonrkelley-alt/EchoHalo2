@@ -1,0 +1,87 @@
+name: Build Pocket Studio v0.5.5 APK
+
+on:
+  push:
+    branches:
+      - pocket-studio-v053-build
+    paths:
+      - pocket_studio_v055_source.b64
+      - .github/workflows/pocket-studio-v055.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out isolated Pocket Studio build branch
+        uses: actions/checkout@v4
+      - name: Configure JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install pinned SDK components
+        run: sdkmanager --install "platforms;android-35" "build-tools;34.0.0"
+      - name: Recover source and verify archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode pocket_studio_v055_source.b64 > "$RUNNER_TEMP/pocket-v055.tar.xz"
+          echo "c8da80ec853ffce556d19aa7b18a9881cf78b9b8c1ff58fe105f423777c5bb93  $RUNNER_TEMP/pocket-v055.tar.xz" | sha256sum -c -
+          mkdir -p pocket-studio
+          tar -xJf "$RUNNER_TEMP/pocket-v055.tar.xz" -C pocket-studio
+          test -f pocket-studio/app/src/main/java/com/pocketstudio/app/MainActivity.java
+          test -f pocket-studio/app/src/main/java/com/pocketstudio/app/core/PromptAssist.java
+          grep -q "versionName '0.5.5'" pocket-studio/app/build.gradle
+      - name: Apply direct SDK build version 0.5.5
+        working-directory: pocket-studio
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("scripts/build_with_sdk.py")
+          t=p.read_text()
+          pairs={
+            'node.set(ANDROID + "versionCode", "8")':'node.set(ANDROID + "versionCode", "10")',
+            'node.set(ANDROID + "versionName", "0.5.3")':'node.set(ANDROID + "versionName", "0.5.5")',
+            'public static final int VERSION_CODE = 8;':'public static final int VERSION_CODE = 10;',
+            'public static final String VERSION_NAME = "0.5.3";':'public static final String VERSION_NAME = "0.5.5";',
+            'Pocket_Studio_v0_5_3_debug.apk':'Pocket_Studio_v0_5_5_debug.apk'
+          }
+          for old,new in pairs.items():
+              if t.count(old)!=1: raise SystemExit("Build template mismatch: "+old)
+              t=t.replace(old,new)
+          p.write_text(t)
+          PY
+      - name: Compile and sign Android APK
+        working-directory: pocket-studio
+        run: python3 scripts/build_with_sdk.py --sdk "$ANDROID_HOME" --allow-new-signing-key
+      - name: Validate APK metadata and source tests
+        shell: bash
+        working-directory: pocket-studio
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_v055_policy.py
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging dist/Pocket_Studio_v0_5_5_debug.apk | head -n 3
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging dist/Pocket_Studio_v0_5_5_debug.apk | grep -E "versionCode='10'.*versionName='0.5.5'"
+          mkdir -p "$RUNNER_TEMP/java-tests"
+          javac -encoding UTF-8 -d "$RUNNER_TEMP/java-tests" \
+            app/src/main/java/com/pocketstudio/app/core/{Json,ImageGeometry,PixelOps,HistoryOps,SseParser,LocalDreamClient,RemoteHostController,PromptAssist}.java \
+            tests/{CoreImageTests,ClientContractTests,RemoteHostControllerTests,LibraryHistoryTests,PromptAssistTests}.java
+          for test in CoreImageTests ClientContractTests RemoteHostControllerTests LibraryHistoryTests PromptAssistTests; do
+            java -cp "$RUNNER_TEMP/java-tests" "$test"
+          done
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Studio-v0.5.5-Android-APK
+          path: |
+            pocket-studio/dist/Pocket_Studio_v0_5_5_debug.apk
+            pocket-studio/dist/Pocket_Studio_v0_5_5_debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
