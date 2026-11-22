@@ -1,0 +1,61 @@
+name: Build Pocket Studio v0.5.4 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pocket-studio-v053-build
+    paths:
+      - 'pocket_studio_v053_payload.b64'
+      - '.github/workflows/pocket-studio-v054.yml'
+      - 'pocket_studio_v054_picker_patch.py'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK components using runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install 'platforms;android-35' 'build-tools;34.0.0'
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -f "$ANDROID_HOME/build-tools/34.0.0/lib/apksigner.jar"
+      - name: Recover Pocket Studio source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pocket-studio-build
+          base64 -d pocket_studio_v053_payload.b64 | xz -d | tar -xf - -C pocket-studio-build
+          test -f pocket-studio-build/app/src/main/java/com/pocketstudio/app/MainActivity.java
+          test -f pocket-studio-build/app/build.gradle
+      - name: Apply v0.5.4 photo picker fix
+        run: python3 pocket_studio_v054_picker_patch.py
+      - name: Compile and sign debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pocket-studio-build
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Pocket_Studio_v0_5_4_debug.apk
+          test -s dist/Pocket_Studio_v0_5_4_debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Studio-v0.5.4-APK
+          path: pocket-studio-build/dist/Pocket_Studio_v0_5_4_debug.apk
+          if-no-files-found: error
+          retention-days: 14
