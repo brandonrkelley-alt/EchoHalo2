@@ -1,13 +1,13 @@
-name: Build Pocket Studio v0.5.3 APK
+name: Build Pocket Studio v0.5.4 APK
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - pocket-studio-v053-build
+      - pocket-studio-v054-build
     paths:
-      - 'pocket_studio_v053_payload.b64'
-      - '.github/workflows/pocket-studio-v053.yml'
+      - 'pocket_studio_v054_payload.b64'
+      - '.github/workflows/pocket-studio-v054.yml'
 
 permissions:
   contents: read
@@ -37,9 +37,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p pocket-studio-build
-          base64 -d pocket_studio_v053_payload.b64 | xz -d | tar -xf - -C pocket-studio-build
+          base64 -d pocket_studio_v054_payload.b64 | xz -d | tar -xf - -C pocket-studio-build
           test -f pocket-studio-build/app/src/main/java/com/pocketstudio/app/MainActivity.java
           test -f pocket-studio-build/app/build.gradle
+      - name: Apply v0.5.4 photo picker fix
+        run: python3 pocket_studio_v054_picker_patch.py
       - name: Compile and sign debug APK
         shell: bash
         run: |
@@ -52,7 +54,7 @@ jobs:
           test -s dist/Pocket_Studio_v0_5_3_debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Pocket-Studio-v0.5.3-APK
+          name: Pocket-Studio-v0.5.4-APK
           path: pocket-studio-build/dist/Pocket_Studio_v0_5_3_debug.apk
           if-no-files-found: error
           retention-days: 14
