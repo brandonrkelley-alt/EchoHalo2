@@ -24,10 +24,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Configure Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install pinned SDK components
-        run: sdkmanager --install "platforms;android-35" "build-tools;34.0.0"
+      - name: Install pinned Android components from runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install 'platforms;android-35' 'build-tools;34.0.0'
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -f "$ANDROID_HOME/build-tools/34.0.0/lib/apksigner.jar"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
       - name: Recover source and verify archive
         shell: bash
         run: |
