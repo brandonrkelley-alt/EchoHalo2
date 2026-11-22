@@ -1,0 +1,48 @@
+name: Build Pocket Studio v0.5.3 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pocket-studio-v053-build
+    paths:
+      - 'pocket_studio_v053_payload.b64'
+      - '.github/workflows/pocket-studio-v053.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK components
+        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0'
+      - name: Recover Pocket Studio source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pocket-studio-build
+          base64 -d pocket_studio_v053_payload.b64 | xz -d | tar -xf - -C pocket-studio-build
+          test -f pocket-studio-build/app/src/main/java/com/pocketstudio/app/MainActivity.java
+          test -f pocket-studio-build/scripts/build_with_sdk.py
+      - name: Compile and sign debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pocket-studio-build
+          python3 scripts/build_with_sdk.py --sdk "${ANDROID_HOME}" --allow-new-signing-key
+          test -s dist/Pocket_Studio_v0_5_3_debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Studio-v0.5.3-APK
+          path: pocket-studio-build/dist/Pocket_Studio_v0_5_3_debug.apk
+          if-no-files-found: error
+          retention-days: 14
