@@ -39,13 +39,16 @@ jobs:
           mkdir -p pocket-studio-build
           base64 -d pocket_studio_v053_payload.b64 | xz -d | tar -xf - -C pocket-studio-build
           test -f pocket-studio-build/app/src/main/java/com/pocketstudio/app/MainActivity.java
-          test -f pocket-studio-build/scripts/build_with_sdk.py
+          test -f pocket-studio-build/app/build.gradle
       - name: Compile and sign debug APK
         shell: bash
         run: |
           set -euo pipefail
           cd pocket-studio-build
-          python3 scripts/build_with_sdk.py --sdk "${ANDROID_HOME}" --allow-new-signing-key
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Pocket_Studio_v0_5_3_debug.apk
           test -s dist/Pocket_Studio_v0_5_3_debug.apk
       - uses: actions/upload-artifact@v4
         with:
