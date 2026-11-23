@@ -1,11 +1,12 @@
-name: Pocket Studio v0.6.1 Android APK
+name: Pocket Studio v0.6.2 Android APK
 on:
   push:
     branches:
-      - pocket-studio-v061-fixes
+      - pocket-studio-v062-performance
     paths:
       - 'pocket_studio_v060_v2_payload_*.txt'
       - 'pocket_studio_v061_repair_patch.py'
+      - 'pocket_studio_v062_performance_patch.py'
       - '.github/workflows/pocket-studio-v060.yml'
   workflow_dispatch:
 
@@ -58,6 +59,12 @@ jobs:
           set -euo pipefail
           python3 pocket_studio_v061_repair_patch.py pocket-studio
           grep -q "versionName '0.6.1'" pocket-studio/app/build.gradle
+      - name: Apply v0.6.2 model defaults and timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 pocket_studio_v062_performance_patch.py pocket-studio
+          grep -q "versionName '0.6.2'" pocket-studio/app/build.gradle
       - name: Run Java contract and capability tests
         shell: bash
         working-directory: pocket-studio
@@ -81,17 +88,17 @@ jobs:
         working-directory: pocket-studio
         run: |
           set -euo pipefail
-          APK=dist/Pocket_Studio_v0_6_1_debug.apk
+          APK=dist/Pocket_Studio_v0_6_2_debug.apk
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | grep -E "package:.*versionCode='12'.*versionName='0.6.1'"
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | grep -E "package:.*versionCode='13'.*versionName='0.6.2'"
           java -jar "$ANDROID_HOME/build-tools/34.0.0/lib/apksigner.jar" verify --verbose "$APK"
-          (cd dist && sha256sum -c Pocket_Studio_v0_6_1_debug.apk.sha256)
+          (cd dist && sha256sum -c Pocket_Studio_v0_6_2_debug.apk.sha256)
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Pocket-Studio-v0.6.1-APK
+          name: Pocket-Studio-v0.6.2-APK
           path: |
-            pocket-studio/dist/Pocket_Studio_v0_6_1_debug.apk
-            pocket-studio/dist/Pocket_Studio_v0_6_1_debug.apk.sha256
+            pocket-studio/dist/Pocket_Studio_v0_6_2_debug.apk
+            pocket-studio/dist/Pocket_Studio_v0_6_2_debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
