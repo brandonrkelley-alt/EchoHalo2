@@ -1,0 +1,1 @@
+Core edit diagnostics classes are reconstructed by the v0.6.4 patch script during the GitHub Android build.
