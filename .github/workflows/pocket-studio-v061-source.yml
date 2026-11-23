@@ -1,0 +1,26 @@
+name: Pocket Studio v0.6.1 source audit
+on:
+  push:
+    branches: [pocket-studio-v061-fixes]
+    paths:
+      - '.github/workflows/pocket-studio-v061-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact verified v0.6 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat pocket_studio_v060_v2_payload_0{0,1,2,3}.txt | base64 --decode > pocket-studio-v060-source.tar.xz
+          echo '3533dde696fad3c9f6f74ee07837b3336e03a4e598f0433573ea040d51854898  pocket-studio-v060-source.tar.xz' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Studio-v060-verified-source
+          path: pocket-studio-v060-source.tar.xz
+          if-no-files-found: error
+          retention-days: 7
