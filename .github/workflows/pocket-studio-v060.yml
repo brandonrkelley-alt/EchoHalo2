@@ -1,13 +1,15 @@
-name: Pocket Studio v0.6.3 Android APK
+name: Pocket Studio v0.6.4 FLUX Edit Diagnostics APK
 on:
   push:
     branches:
-      - pocket-studio-v063-compare
+      - pocket-studio-v064-flux-edit-diagnostics
     paths:
       - 'pocket_studio_v060_v2_payload_*.txt'
       - 'pocket_studio_v061_repair_patch.py'
       - 'pocket_studio_v062_performance_patch.py'
       - 'pocket_studio_v063_compare_patch.py'
+      - 'pocket_studio_v064_flux_edit_patch.py'
+      - 'pocket_studio_v064/**'
       - '.github/workflows/pocket-studio-v060.yml'
   workflow_dispatch:
 
@@ -72,6 +74,12 @@ jobs:
           set -euo pipefail
           python3 pocket_studio_v063_compare_patch.py pocket-studio
           grep -q "versionName '0.6.3'" pocket-studio/app/build.gradle
+      - name: Apply v0.6.4 whole-photo edit and diagnostics patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 pocket_studio_v064_flux_edit_patch.py pocket-studio
+          grep -q "versionName '0.6.4'" pocket-studio/app/build.gradle
       - name: Run Java contract and capability tests
         shell: bash
         working-directory: pocket-studio
@@ -79,9 +87,9 @@ jobs:
           set -euo pipefail
           mkdir -p build/test-classes
           javac -encoding UTF-8 -d build/test-classes \
-            app/src/main/java/com/pocketstudio/app/core/{Json,ImageGeometry,PixelOps,HistoryOps,SseParser,LocalDreamClient,RemoteHostController,PromptAssist,ModelCapabilities}.java \
-            tests/{CoreImageTests,ClientContractTests,RemoteHostControllerTests,LibraryHistoryTests,PromptAssistTests,ModelCapabilitiesTests}.java
-          for test in CoreImageTests ClientContractTests RemoteHostControllerTests LibraryHistoryTests PromptAssistTests ModelCapabilitiesTests; do
+            app/src/main/java/com/pocketstudio/app/core/{Json,ImageGeometry,PixelOps,HistoryOps,SseParser,LocalDreamClient,RemoteHostController,PromptAssist,ModelCapabilities,EditDiagnostics}.java \
+            tests/{CoreImageTests,ClientContractTests,RemoteHostControllerTests,LibraryHistoryTests,PromptAssistTests,ModelCapabilitiesTests,EditDiagnosticsTests}.java
+          for test in CoreImageTests ClientContractTests RemoteHostControllerTests LibraryHistoryTests PromptAssistTests ModelCapabilitiesTests EditDiagnosticsTests; do
             java -cp build/test-classes "$test"
           done
       - name: Compile and sign Pocket Studio APK
@@ -95,17 +103,17 @@ jobs:
         working-directory: pocket-studio
         run: |
           set -euo pipefail
-          APK=dist/Pocket_Studio_v0_6_3_debug.apk
+          APK=dist/Pocket_Studio_v0_6_4_debug.apk
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | grep -E "package:.*versionCode='14'.*versionName='0.6.3'"
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | grep -E "package:.*versionCode='15'.*versionName='0.6.4'"
           java -jar "$ANDROID_HOME/build-tools/34.0.0/lib/apksigner.jar" verify --verbose "$APK"
-          (cd dist && sha256sum -c Pocket_Studio_v0_6_3_debug.apk.sha256)
+          (cd dist && sha256sum -c Pocket_Studio_v0_6_4_debug.apk.sha256)
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Pocket-Studio-v0.6.3-APK
+          name: Pocket-Studio-v0.6.4-APK
           path: |
-            pocket-studio/dist/Pocket_Studio_v0_6_3_debug.apk
-            pocket-studio/dist/Pocket_Studio_v0_6_3_debug.apk.sha256
+            pocket-studio/dist/Pocket_Studio_v0_6_4_debug.apk
+            pocket-studio/dist/Pocket_Studio_v0_6_4_debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
