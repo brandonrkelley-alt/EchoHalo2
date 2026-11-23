@@ -2,7 +2,7 @@ name: Pocket Studio v0.6.0 Android APK
 on:
   push:
     branches:
-      - pocket-studio-v060-build
+      - pocket-studio-v061-fixes
     paths:
       - 'pocket_studio_v060_v2_payload_*.txt'
       - '.github/workflows/pocket-studio-v060.yml'
@@ -44,6 +44,13 @@ jobs:
           tar -xJf "$RUNNER_TEMP/pocket-v060.tar.xz" -C pocket-studio
           test -f pocket-studio/app/src/main/java/com/pocketstudio/app/core/ModelCapabilities.java
           grep -q "versionName '0.6.0'" pocket-studio/app/build.gradle
+      - name: Upload verified source for patch audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Studio-v060-verified-source
+          path: ${{ runner.temp }}/pocket-v060.tar.xz
+          if-no-files-found: error
+          retention-days: 7
       - name: Run Java contract and capability tests
         shell: bash
         working-directory: pocket-studio
