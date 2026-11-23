@@ -72,7 +72,7 @@ change(activity,
         slider(c,"Steps",1,60,state.steps,v->state.steps=v,"");''')
 change(activity,
     '                    note(c,"Model defaults: "+state.steps+" steps, guidance "+state.cfg+", sampler "+state.scheduler+". You can change these in Create or Edit.");',
-    '                    note(c,"Current settings: "+state.steps+" steps, guidance "+state.cfg+", sampler "+state.scheduler+". Restore this model\\'s defaults in Create or Edit.");')
+    '                    note(c,"Current settings: "+state.steps+" steps, guidance "+state.cfg+", sampler "+state.scheduler+". Restore defaults for this model in Create or Edit.");')
 change(activity,
     '            StudioState.Preview current=state.previews.get(state.previewIndex);\n            if(current.savedId.isEmpty())',
     '''            StudioState.Preview current=state.previews.get(state.previewIndex);
